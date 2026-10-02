@@ -1,0 +1,5 @@
+__pycache__/
+*.gz
+atlas_build.jsonl
+*.log
+before_reingest_*.json
