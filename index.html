@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evidence Atlas · Toronto</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Color+Emoji&display=swap" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #f6f5f2; --panel: #ffffff; --ink: #17191c; --muted: #646a73; --faint: #9aa0a8; --line: #e7e5e0; --hover: #f3f2ee;
+      --brand: #17191c;
+      --verified: #0e7c5a; --verified-bg: #e3f3ec;
+      --landmark: #2f5bd3; --landmark-bg: #e6ecfb;
+      --area: #b86e0b; --area-bg: #fbefdc;
+      --street: #8a7a5c; --street-bg: #f1ece2;
+      --rejected: #c0392b; --rejected-bg: #fbe5e2;
+      --none: #8b9099; --none-bg: #eff0f2;
+      --radius: 12px; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif, "Noto Color Emoji"; -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--landmark); outline-offset: 2px; }
+    .emoji { font-family: "Noto Color Emoji", sans-serif; }
+
+    /* ---------- top bar ---------- */
+    header { height: 60px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 260px; }
+    .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 16px; }
+    .brand b { font-size: 15px; display: block; line-height: 1.2; }
+    .brand small { color: var(--muted); font-size: 12px; }
+    form.search { flex: 1; max-width: 640px; position: relative; }
+    form.search input { width: 100%; height: 38px; border: 1px solid var(--line); border-radius: 10px; padding: 0 92px 0 36px; font: inherit; background: var(--bg); }
+    form.search input:focus { background: #fff; border-color: #c9ccd2; outline: none; box-shadow: 0 0 0 3px rgba(47,91,211,.12); }
+    form.search .icon { position: absolute; left: 12px; top: 9px; color: var(--faint); pointer-events: none; }
+    form.search button { position: absolute; right: 4px; top: 4px; height: 30px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 600; }
+    form.search button:disabled { opacity: .5; }
+    .top-actions { margin-left: auto; display: flex; gap: 8px; }
+    .btn { height: 34px; padding: 0 12px; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: var(--hover); }
+    .btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .btn.primary:hover { background: #2b2f35; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn .badge { background: var(--brand); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 7px; line-height: 18px; }
+    .btn.primary .badge { background: #fff; color: var(--brand); }
+
+    /* ---------- layout ---------- */
+    .app { display: grid; grid-template-columns: 360px minmax(0, 1fr) 420px; height: calc(100vh - 60px); }
+    .left, .right { background: var(--panel); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    .left { border-right: 1px solid var(--line); }
+    .right { border-left: 1px solid var(--line); }
+    #map { height: 100%; width: 100%; background: #eef0f1; }
+    .basemap { filter: grayscale(1) contrast(.82) brightness(1.1) sepia(.12) hue-rotate(170deg) saturate(.6); }
+    .mapwrap { position: relative; min-height: 0; }
+    @media (max-width: 1180px) { .app { grid-template-columns: 320px minmax(0, 1fr) 380px; } }
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; height: auto; }
+      .mapwrap { height: 55vh; order: -1; } .left, .right { border: 0; border-top: 1px solid var(--line); max-height: none; }
+      .brand small { display: none; } .brand { min-width: 0; }
+    }
+
+    /* ---------- left panel ---------- */
+    .section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin: 0 0 8px; }
+    .context { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .context h2 { font-size: 15px; margin: 0; }
+    .context p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .link { background: none; border: 0; padding: 0; color: var(--landmark); font-weight: 500; font-size: 13px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; }
+    .chip:hover { background: var(--hover); }
+    .callout.warn { background: var(--area-bg); color: #6b4306; }
+    .chip.on { background: var(--ink, #15181d); border-color: var(--ink, #15181d); color: #fff; }
+    .uc-list { display: grid; gap: 8px; }
+    .uc { display: grid; grid-template-columns: 34px 1fr; gap: 10px; text-align: left; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font: inherit; color: inherit; cursor: pointer; }
+    .uc:hover { background: var(--hover); border-color: #cfd3d9; }
+    .uc:focus-visible { outline: 2px solid var(--landmark); outline-offset: 2px; }
+    .uc .ic, .uc-head .ic { width: 34px; height: 34px; border-radius: 9px; background: var(--bg); display: grid; place-items: center; font-size: 18px; }
+    .uc b { display: block; font-size: 13.5px; line-height: 1.3; }
+    .uc .who, .uc-head .who { display: block; color: var(--faint); font-size: 11.5px; margin: 2px 0 6px; }
+    .uc .line { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .uc .pays strong { color: #3d434b; font-weight: 600; }
+    .uc .sig { display: inline-block; margin-top: 7px; font-size: 11.5px; color: var(--verified); background: var(--verified-bg); border-radius: 6px; padding: 2px 7px; }
+    .uc .sig.plain { color: var(--muted); background: var(--bg); }
+    .uc .go { display: block; margin-top: 8px; font-size: 12.5px; font-weight: 500; color: var(--landmark); }
+    .uc-brief { margin-bottom: 6px; }
+    .uc-head { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: start; }
+    .uc-head .ic { width: 40px; height: 40px; font-size: 22px; }
+    .uc-head h1 { font-size: 19px; line-height: 1.25; margin: 0; letter-spacing: -.01em; }
+    .uc-brief dl { margin: 14px 0 6px; display: grid; gap: 10px; }
+    .uc-brief dt { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+    .uc-brief dd { margin: 2px 0 0; font-size: 13px; color: #3d434b; }
+    .muted-p { color: var(--muted); font-size: 13px; margin: 0; }
+    .kind { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+    .kind select { font: inherit; color: var(--text, #15181d); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--panel); flex: 1; }
+    .filters { display: grid; gap: 4px; }
+    .filter { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; border: 0; background: none; text-align: left; }
+    .filter:hover { background: var(--hover); }
+    .filter .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+    .filter .name { font-size: 13px; font-weight: 500; }
+    .filter .hint { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; line-height: 1.35; }
+    .filter.off { opacity: .4; }
+    .swatch { width: 14px; height: 14px; border-radius: 50%; border: 3px solid currentColor; background: #fff; }
+    .swatch.area { border-style: dashed; border-width: 2px; }
+    .swatch.street { border-radius: 3px; height: 6px; border: 0; background: currentColor; }
+    .swatch.rejected { border-style: dashed; border-width: 2px; }
+    .swatch.none { border-width: 2px; }
+    .list { overflow: auto; flex: 1; padding: 6px 8px 24px; }
+    .item { display: grid; grid-template-columns: 36px 1fr; gap: 10px; padding: 9px 8px; border-radius: 10px; cursor: pointer; align-items: start; }
+    .item:hover { background: var(--hover); }
+    .item.selected { background: #eef2fd; box-shadow: inset 0 0 0 1px #c9d5f6; }
+    .item .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; }
+    .item .t { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+    .item .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .item .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .tag { font-size: 11px; font-weight: 500; border-radius: 6px; padding: 1px 6px; background: var(--none-bg); color: var(--muted); }
+    .tag.good { background: var(--verified-bg); color: var(--verified); }
+    .tag.bad { background: var(--rejected-bg); color: var(--rejected); }
+    .tag.warn { background: var(--area-bg); color: var(--area); }
+    .tag.info { background: var(--landmark-bg); color: var(--landmark); }
+    .item.muted .t { color: var(--muted); font-weight: 500; }
+    .working { color: var(--landmark); font-size: 12px; margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+    .spinner { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { color: var(--muted); padding: 16px 10px; font-size: 13px; }
+
+    /* ---------- map ---------- */
+    .mapnote { position: absolute; z-index: 500; left: 12px; bottom: 12px; background: rgba(255,255,255,.94); border: 1px solid var(--line);
+      border-radius: 10px; padding: 8px 10px; font-size: 12px; color: var(--muted); max-width: 340px; box-shadow: var(--shadow); }
+    .mapnote b { color: var(--ink); }
+    .leaflet-control-zoom { border: 0 !important; box-shadow: var(--shadow) !important; }
+    .leaflet-control-zoom a { color: var(--ink) !important; }
+    .leaflet-tooltip { font: 12px/1.4 Inter, sans-serif, "Noto Color Emoji"; border-radius: 8px; border: 1px solid var(--line); box-shadow: var(--shadow); padding: 6px 8px; }
+    .pin { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 3px solid var(--c); display: grid; place-items: center;
+      font: 15px "Noto Color Emoji", sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.18); position: relative; transition: transform .15s; }
+    .pin:hover { transform: scale(1.12); }
+    .pin.sel { transform: scale(1.25); box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 25%, transparent), 0 2px 6px rgba(0,0,0,.2); }
+    .pin .n { position: absolute; top: -7px; right: -9px; background: var(--ink); color: #fff; font: 600 10px/16px Inter, sans-serif; border-radius: 999px; padding: 0 5px; }
+    .xpin { width: 18px; height: 18px; border-radius: 50%; border: 2px dashed var(--rejected); background: rgba(255,255,255,.85); color: var(--rejected);
+      display: grid; place-items: center; font: 700 11px/1 Inter, sans-serif; }
+    .xpin.sel { transform: scale(1.4); background: var(--rejected-bg); }
+
+    /* ---------- right panel ---------- */
+    .scroll { overflow: auto; flex: 1; }
+    .pad { padding: 18px 20px; }
+    .hero h1 { font-size: 20px; line-height: 1.25; margin: 0 0 6px; letter-spacing: -.01em; }
+    .hero p { color: var(--muted); margin: 0 0 16px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+    .stat { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+    .stat b { font-size: 22px; display: block; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .stat.good b { color: var(--verified); } .stat.bad b { color: var(--rejected); }
+    .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+    .steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; }
+    .steps .num { width: 28px; height: 28px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+    .steps b { display: block; font-size: 13.5px; }
+    .steps span { color: var(--muted); font-size: 12.5px; }
+    .callout { background: var(--bg); border-radius: var(--radius); padding: 12px 14px; font-size: 12.5px; color: var(--muted); margin-top: 18px; }
+
+    .ev-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+    .ev-head h1 { font-size: 19px; margin: 8px 0 2px; line-height: 1.25; letter-spacing: -.01em; }
+    .ev-head .sub { color: var(--muted); font-size: 12.5px; }
+    .close { border: 0; background: var(--bg); width: 30px; height: 30px; border-radius: 8px; flex: none; }
+    video { width: 100%; border-radius: var(--radius); background: #0d0f12; margin: 14px 0 4px; aspect-ratio: 16 / 9; display: block; }
+    .clipmeta { color: var(--faint); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 20px 0 10px; }
+    .chain { list-style: none; margin: 0; padding: 0; position: relative; }
+    .chain > li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding-bottom: 14px; position: relative; }
+    .chain > li > div { min-width: 0; }
+    .chain .body ul li { margin: 2px 0; }
+    .chain > li:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: 26px; bottom: 0; width: 2px; background: var(--line); }
+    .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--bg); color: var(--muted); z-index: 1; }
+    .dot.ok { background: var(--verified-bg); color: var(--verified); }
+    .dot.no { background: var(--rejected-bg); color: var(--rejected); }
+    .dot.mid { background: var(--area-bg); color: var(--area); }
+    .chain b { font-size: 13.5px; display: block; }
+    .chain .body { font-size: 13px; color: #3d434b; }
+    .chain .body .q { background: #fff6d6; border-radius: 4px; padding: 0 3px; }
+    details { margin-top: 6px; }
+    summary { cursor: pointer; color: var(--landmark); font-size: 12.5px; font-weight: 500; }
+    details ul { margin: 6px 0 0; padding-left: 16px; color: var(--muted); font-size: 12px; }
+    .facts { display: flex; flex-wrap: wrap; gap: 6px; }
+    .fact { border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 12.5px; }
+    .fact.yes { border-color: #bfe3d3; background: var(--verified-bg); }
+    .flag { border-radius: 10px; padding: 9px 11px; font-size: 12.5px; margin: 6px 0; background: var(--area-bg); color: #7a4a08; }
+    .flag.bad { background: var(--rejected-bg); color: #8e2a1f; }
+    .flag.good { background: var(--verified-bg); color: #0b5d44; }
+    .caption { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+    [hidden] { display: none !important; }
+    .synth p { margin: 0 0 6px; } .synth ul { margin: 0 0 6px; padding-left: 16px; } .synth li { margin: 3px 0; }
+    .actions { border-top: 1px solid var(--line); padding: 12px 20px; display: grid; gap: 8px; background: var(--panel); }
+    .actions .row { display: flex; gap: 8px; }
+    .actions .row .btn { flex: 1; justify-content: center; }
+    textarea { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; resize: vertical; min-height: 38px; }
+    .coord { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+    .review { display: flex; gap: 6px; margin-top: 6px; }
+    .review .btn { height: 28px; font-size: 12.5px; }
+    .review .btn.on-ok { background: var(--verified-bg); border-color: #bfe3d3; color: var(--verified); }
+    .review .btn.on-no { background: var(--rejected-bg); border-color: #f2c4bd; color: var(--rejected); }
+
+    /* ---------- shortlist sheet & dialogs ---------- */
+    .sheet { position: fixed; top: 60px; right: 0; bottom: 0; width: 420px; max-width: 100vw; background: var(--panel); border-left: 1px solid var(--line);
+      box-shadow: -8px 0 30px rgba(16,24,40,.12); z-index: 1000; display: flex; flex-direction: column; transform: translateX(105%); transition: transform .2s ease; }
+    .sheet.open { transform: none; }
+    .sheet .head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+    .sheet .head h2 { margin: 0; font-size: 16px; }
+    .sl-item { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+    .sl-item .t { font-weight: 600; font-size: 13.5px; }
+    .sl-item .s { font-size: 12px; color: var(--muted); }
+    dialog { border: 0; border-radius: 16px; padding: 0; width: min(760px, 94vw); box-shadow: 0 24px 60px rgba(16,24,40,.25); color: var(--ink); }
+    dialog::backdrop { background: rgba(23,25,28,.45); }
+    dialog .head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }
+    dialog .head h2 { margin: 0; font-size: 16px; }
+    dialog .content { padding: 18px 20px 22px; max-height: 72vh; overflow: auto; }
+    .md h2 { font-size: 15px; margin: 18px 0 6px; } .md h2:first-child { margin-top: 0; }
+    .md ul { margin: 0; padding-left: 18px; } .md li { margin: 3px 0; }
+    .md p { margin: 8px 0; } .md .disclaimer { color: var(--muted); font-style: italic; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 14px; }
+    table.cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    table.cmp td, table.cmp th { border-top: 1px solid var(--line); padding: 8px; vertical-align: top; text-align: left; }
+    mark { background: #fff1b8; border-radius: 3px; padding: 0 2px; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo emoji" aria-hidden="true">📍</div>
+      <div><b>Evidence Atlas</b><small>Toronto dashcam archive · placed without GPS</small></div>
+    </div>
+    <form class="search" id="searchForm" role="search">
+      <span class="icon" aria-hidden="true">⌕</span>
+      <input id="q" autocomplete="off" aria-label="Search the Toronto archive" placeholder="Search the footage, e.g. cyclists near storefronts" />
+      <button id="go" type="submit">Search</button>
+    </form>
+    <div class="top-actions">
+      <button class="btn" type="button" id="howBtn">How it works</button>
+      <button class="btn primary" type="button" id="slBtn">Shortlist <span class="badge" id="slCount">0</span></button>
+    </div>
+  </header>
+
+  <div class="app">
+    <section class="left" aria-label="Clips">
+      <div class="section">
+        <div class="context">
+          <div><h2 id="ctxTitle">Whole archive</h2><p id="ctxSub">Loading the atlas…</p></div>
+          <button class="link" type="button" id="backBtn" hidden>← Whole archive</button>
+        </div>
+      </div>
+      <div class="section">
+        <p class="eyebrow">Use cases</p>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="section">
+        <p class="eyebrow">Show on map</p>
+        <div class="filters" id="filters"></div>
+      </div>
+      <div class="list" id="list" role="listbox" aria-label="Clips"></div>
+    </section>
+
+    <div class="mapwrap">
+      <div id="map" role="region" aria-label="Map of places earned from the footage"></div>
+      <div class="mapnote"><b>Every pin is earned.</b> A sign in the clip was read, matched to OpenStreetMap and checked against the drive's route. Nothing comes from GPS or model-guessed coordinates.</div>
+    </div>
+
+    <aside class="right" aria-label="Evidence">
+      <div class="scroll" id="rightScroll"><div class="pad" id="right"></div></div>
+      <div class="actions" id="actions" hidden>
+        <textarea id="note" rows="1" placeholder="Add a planner note (optional)" aria-label="Planner note"></textarea>
+        <div class="row">
+          <button class="btn primary" type="button" id="saveBtn">Save to shortlist</button>
+          <button class="btn" type="button" id="relookBtn">Re-watch live</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <aside class="sheet" id="sheet" aria-label="Shortlist">
+    <div class="head"><h2>Shortlist</h2><button class="close" type="button" id="closeSheet" aria-label="Close shortlist">✕</button></div>
+    <div class="scroll pad" id="slList"></div>
+    <div class="actions">
+      <p class="coord" style="margin:0">Saved for this browser session only. Clips without a place are saved as research leads.</p>
+      <label class="kind">Write it as <select id="cardKind" aria-label="Deliverable"></select></label>
+      <button class="btn primary" type="button" id="cardBtn" disabled>Generate site brief</button>
+    </div>
+  </aside>
+
+  <dialog id="cardDialog" aria-labelledby="cardTitle">
+    <div class="head"><h2 id="cardTitle">Scouting card</h2><div style="display:flex;gap:8px"><button class="btn" type="button" id="copyCard">Copy</button><button class="close" type="button" data-close aria-label="Close">✕</button></div></div>
+    <div class="content"><div class="md" id="cardOut"></div><p class="coord" id="cardMeta"></p></div>
+  </dialog>
+
+  <dialog id="howDialog" aria-labelledby="howTitle">
+    <div class="head"><h2 id="howTitle">How Evidence Atlas places footage without GPS</h2><button class="close" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="content">
+      <ol class="steps">
+        <li><span class="num">1</span><div><b>Search the archive</b><span>VAST VSS finds clips by meaning. Its location filter only knows "Toronto", which is not a place you can put a pin on.</span></div></li>
+        <li><span class="num">2</span><div><b>Second look</b><span>Cosmos Reason re-watches each 5-second clip and reads street signs, business names and venues, and says whether people are riding or parking bicycles.</span></div></li>
+        <li><span class="num">3</span><div><b>OpenStreetMap match</b><span>Two corner street signs that meet give a verified intersection. A unique named place gives a landmark. Overhead guide signs only point toward streets, so they give an area, never a pin. Coordinates always come from OpenStreetMap, never from a model.</span></div></li>
+        <li><span class="num">4</span><div><b>Route check</b><span>Clips come from continuous drives. A match that would need the car to jump kilometres in seconds is rejected, and the reason is shown. Seeing the same sign twice does not count as support.</span></div></li>
+        <li><span class="num">5</span><div><b>You decide</b><span>Accept or reject places, save clips, and generate a scouting card that keeps the evidence and the limits attached.</span></div></li>
+      </ol>
+      <div class="callout">Stock phrases ("FOR LEASE", "DENTAL CLINIC") are never landmarks. Names with several OpenStreetMap matches, and street pairs that cross in two places, are treated as ambiguous. Search results are top-k, not a census: counts are clips, not people.</div>
+      <h3>Experiment: improving the index itself</h3>
+      <p style="margin:0 0 10px;color:var(--muted);font-size:13px">We re-ingested one 30-second chunk with a sign-reading caption prompt and compared the captions.</p>
+      <button class="btn" type="button" id="compareBtn">Show re-ingest before / after</button>
+      <div id="compareBox" hidden style="margin-top:12px">
+        <p class="coord" id="compareStatus">Loading…</p>
+        <table class="cmp"><thead><tr><th>Clip</th><th>Original caption</th><th>Sign-reading prompt</th></tr></thead><tbody id="compareRows"></tbody></table>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const USE_CASES = [
+      { id: "scouting", icon: "📣", short: "Ad & retail scouting", title: "Out-of-home ad and retail site scouting",
+        who: "Media planners, billboard owners, retail site selection",
+        problem: "Scouting a corridor takes a day on foot, and street-view imagery is months old.",
+        does: "Finds storefronts, venue entrances and ad surfaces in ordinary drive footage and ties each one to a street corner, with the evidence attached.",
+        pays: "Agencies per seat, or a paid site brief per corridor.",
+        query: "billboards and storefront signs on a busy downtown street", deliverable: "Site brief",
+        signal: (g) => g.ad_surfaces && `${fmt(g.ad_surfaces.all)} clips show storefront or ad signs · ${fmt(g.ad_surfaces.with_street)} on a known street` },
+      { id: "claims", icon: "🛡️", short: "Claims & fleet incidents", title: "Insurance and fleet: where did this clip happen?",
+        who: "Insurers, fleet operators, dashcam makers",
+        problem: "Clips arrive with GPS missing or stripped, so adjusters place them by eye.",
+        does: "Gives a location built from the signs in the clip, says how precise it is, and shows the matches it rejected, so the result can be audited.",
+        pays: "Per-clip API fee inside claims and telematics tools.",
+        query: "car stopped at an intersection with traffic lights", deliverable: "Location report",
+        signal: (g, s) => s.clips && `${fmt(["verified_intersection", "landmark_match", "approximate_area"].reduce((n, k) => n + (s.by_status?.[k] || 0), 0))} clips placed within 60–350 m · ${fmt(s.clips - (s.by_status?.unlocated || 0))} on a known street · none used GPS` },
+      { id: "roadwork", icon: "🚧", short: "Roadwork audit", title: "Roadwork and lane-closure audit",
+        who: "City transportation teams, utilities, business improvement areas",
+        problem: "Work zones are inspected by hand, a few streets at a time.",
+        does: "Finds cones, closures and work zones in footage from vehicles that already drive the city, and places them by street.",
+        pays: "Annual city or utility contract, using bus or service-fleet cameras the city already runs.",
+        query: "construction cones and road work blocking a lane", deliverable: "Street audit",
+        signal: (g) => g.roadwork && `${fmt(g.roadwork.all)} clips show roadwork · ${fmt(g.roadwork.with_street)} on a known street` },
+      { id: "curb", icon: "🚚", short: "Curb & deliveries", title: "Curb and delivery management",
+        who: "Cities, curb-management platforms, logistics companies",
+        problem: "Double parking and loading in live lanes are hard to see at city scale.",
+        does: "Finds delivery vehicles stopped in lanes and places them, so curb rules and loading zones can go where the blockages are.",
+        pays: "Data licensing to curb platforms, and studies for cities.",
+        query: "delivery truck double parked on the street", deliverable: "Curb report",
+        signal: () => "Found through search, then placed the same way as every other clip" },
+      { id: "safety", icon: "🚲", short: "Cycling & pedestrian safety", title: "Cycling and pedestrian safety",
+        who: "Vision Zero teams, transportation planners, advocacy groups",
+        problem: "Bike and pedestrian counts are expensive and cover only a few streets.",
+        does: "The second look says whether people are riding or parking bikes, and where. When the index caption disagrees, the clip is flagged instead of trusted.",
+        pays: "Grant-funded safety studies and planning consultancies.",
+        query: "cyclists riding in a bike lane next to traffic", deliverable: "Safety observations",
+        signal: (g) => g.riding && `${fmt(g.riding.all)} clips with someone riding · ${fmt(g.parked_bicycles.all)} with parked bikes` },
+      { id: "verify", icon: "📰", short: "Footage verification", title: "Verify where footage was filmed",
+        who: "Newsrooms, fact-checkers, open-source researchers",
+        problem: "Placing a viral clip takes hours, and a confident wrong location spreads fast.",
+        does: "Shows the evidence for every place and rejects matches the drive could not have reached, like the Art Gallery of Ontario banner.",
+        pays: "Subscriptions for verification desks.",
+        query: "street name signs at an intersection", deliverable: "Verification note",
+        signal: (g, s) => s.clips && `${fmt(s.route_rejected)} plausible but impossible matches rejected · ${fmt(s.route_supported)} confirmed by a second sign` }
+    ];
+    const UC = Object.fromEntries(USE_CASES.map(u => [u.id, u]));
+    const ICON = { cyclist: "🚲", construction: "🚧", storefront: "🏪", delivery: "🚚", pedestrian: "🚶",
+      parked_bicycles: "🅿️", skateboarder: "🛹", ad_surface: "📣", other: "📍" };
+    const CAT_LABEL = { cyclist: "Cyclist", construction: "Roadwork", storefront: "Storefront or venue", delivery: "Delivery",
+      pedestrian: "Pedestrians", parked_bicycles: "Parked bicycles", skateboarder: "Skateboarder", ad_surface: "Ad surface", other: "Street scene" };
+    const KIND = {
+      verified: { label: "Verified intersection", hint: "Two corner street signs that meet. Within ~60 m.", color: "var(--verified)", bg: "var(--verified-bg)", hex: "#0e7c5a", swatch: "" },
+      landmark: { label: "Landmark", hint: "A uniquely named place was read. Within ~150 m.", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" },
+      area: { label: "Approximate area", hint: "Guide signs name streets that meet. Within ~350 m.", color: "var(--area)", bg: "var(--area-bg)", hex: "#b86e0b", swatch: "area" },
+      street: { label: "Street only", hint: "Street known, position along it unknown. Shown when selected.", color: "var(--street)", bg: "var(--street-bg)", hex: "#8a7a5c", swatch: "street" },
+      rejected: { label: "Rejected by route check", hint: "Sign matched, but the drive could not have been there.", color: "var(--rejected)", bg: "var(--rejected-bg)", hex: "#c0392b", swatch: "rejected" },
+      none: { label: "No place found", hint: "Nothing readable to place. Never on the map.", color: "var(--none)", bg: "var(--none-bg)", hex: "#8b9099", swatch: "none" },
+      pending: { label: "Checking…", hint: "", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" }
+    };
+    const KIND_ORDER = ["verified", "landmark", "area", "street", "rejected", "none", "pending"];
+    const PRECISION = {
+      verified: "Verified intersection · within about 60 m", landmark: "Near a named landmark · within about 150 m",
+      area: "Approximate area · within about 350 m", street: "Somewhere along this street", rejected: "Rejected by the route check",
+      none: "Location unknown", pending: "Second look running"
+    };
+    const SECOND_LOOK_TOP = 8, CONCURRENCY = 2;
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const state = { view: "atlas", run: 0, abort: new AbortController(), results: [], selected: null, query: "", meta: null, useCase: null,
+      hidden: new Set(["none"]),
+      atlas: { entries: [], bySource: new Map(), unlocatedSet: new Set(), stats: {}, unlocated: 0, built_at: null, model: null },
+      shortlist: JSON.parse(sessionStorage.getItem("ea-shortlist-v3") || "[]") };
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+    const fileOf = (s) => (s || "").split("/").pop();
+    const fmt = (n) => Number(n || 0).toLocaleString("en-CA");
+    const secs = (h) => `${Math.round(h.segment_start_sec)}–${Math.round(h.segment_end_sec)} s`;
+
+    function kindOf(h) {
+      if (!h.place) return h.stage ? "pending" : "none";
+      if (h.place.route_rejected) return "rejected";
+      return { verified_intersection: "verified", landmark_match: "landmark", approximate_area: "area",
+        approximate_street: "street", street_only: "street" }[h.place.status] || "none";
+    }
+    function titleOf(h) {
+      const k = kindOf(h);
+      if (k === "rejected") return `“${h.place.route_rejected.label}”`;
+      if (h.place && h.place.label) return h.place.label;
+      if (k === "pending") return CAT_LABEL[h.category] || "Clip";
+      return CAT_LABEL[h.category] || "Clip";
+    }
+
+    /* ---------- map ---------- */
+    const map = L.map("map", { zoomControl: false, preferCanvas: false }).setView([43.662, -79.40], 13);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, className: "basemap",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    const layer = L.layerGroup().addTo(map);
+
+    async function api(path, body, signal) {
+      const res = await fetch("/app/api/" + path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal } : { signal });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || ("HTTP " + res.status));
+      return data;
+    }
+
+    /* ---------- atlas & search ---------- */
+    async function loadAtlas() {
+      try {
+        const data = await api("atlas");
+        const a = state.atlas;
+        a.entries = (data.entries || []).map(e => ({ ...e, id: e.source }));
+        a.bySource = new Map(a.entries.map(e => [e.source, e]));
+        a.unlocatedSet = new Set(data.unlocated_sources || []);
+        a.stats = data.stats || {}; a.signals = data.signals || {}; a.unlocated = data.unlocated || 0; a.built_at = data.built_at; a.model = data.model;
+      } catch { /* the app still works as live search */ }
+      if (state.view === "atlas") showAtlas();
+    }
+
+    function showAtlas() {
+      state.abort.abort(); state.abort = new AbortController(); state.run++;
+      state.view = "atlas"; state.query = ""; $("q").value = ""; state.selected = null; state.hidden.add("none"); state.useCase = null; renderUseCaseChips();
+      const order = (e) => KIND_ORDER.indexOf(kindOf(e));
+      state.results = state.atlas.entries.slice().sort((x, y) => order(x) - order(y) || String(titleOf(x)).localeCompare(String(titleOf(y))));
+      $("ctxTitle").textContent = "Whole archive";
+      const s = state.atlas.stats;
+      $("ctxSub").textContent = s.clips ? `${fmt(s.clips)} clips re-watched · ${fmt(placedCount())} placed` : "Atlas not built yet. Use search.";
+      $("backBtn").hidden = true;
+      corroborate(); renderAll(true);
+    }
+    $("backBtn").onclick = showAtlas;
+
+    const placedCount = () => state.results.filter(h => ["verified", "landmark", "area"].includes(kindOf(h))).length;
+
+    async function runSearch(query, useCase = null) {
+      query = (query || "").trim(); if (!query) return;
+      state.abort.abort(); state.abort = new AbortController();
+      const run = ++state.run; state.view = "search"; state.query = query; $("q").value = query;
+      state.results = []; state.selected = null; state.meta = null; state.hidden.delete("none");
+      state.useCase = UC[useCase] ? useCase : null; renderUseCaseChips();
+      const uc = UC[state.useCase];
+      $("ctxTitle").textContent = uc ? `${uc.icon} ${uc.short}` : `“${query}”`; $("ctxSub").textContent = "Searching the Toronto archive…"; $("backBtn").hidden = false;
+      $("go").disabled = true; renderAll(false);
+      try {
+        const data = await api("search", { query, location: "toronto" }, state.abort.signal);
+        if (run !== state.run) return;
+        state.meta = data;
+        state.results = (data.results || []).map((h, i) => {
+          const known = state.atlas.bySource.get(h.source);
+          if (known) return { ...h, rank: i, relook: known.relook, place: known.place, category: known.category, stage: null };
+          if (state.atlas.unlocatedSet.has(h.source)) return { ...h, rank: i, stage: "Loading the second look…" };
+          return { ...h, rank: i, stage: i < SECOND_LOOK_TOP ? "Waiting for a second look…" : null };
+        });
+        $("ctxSub").textContent = data.fallback
+          ? `${data.count} keyword matches from the re-watched archive · VSS search unavailable`
+          : `${data.count} best matches · ${(data.latency_ms / 1000).toFixed(1)} s · top results, not a census`;
+        corroborate(); renderAll(true);
+        secondLook(run, state.results.filter(h => h.stage));
+      } catch (err) {
+        if (err.name !== "AbortError" && run === state.run) { $("ctxSub").textContent = "Search failed: " + err.message; state.meta = { count: 0 }; renderList(); }
+      } finally { if (run === state.run) $("go").disabled = false; }
+    }
+    $("searchForm").onsubmit = (e) => { e.preventDefault(); runSearch($("q").value); };
+
+    async function secondLook(run, hits) {
+      const queue = hits.slice();
+      const worker = async () => { while (queue.length && run === state.run) await relookOne(queue.shift(), run); };
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    }
+
+    const clueSet = (rl) => [...(rl?.streets || []).map(s => s.osm_name), ...(rl?.landmarks || [])].sort().join(", ");
+    async function relookOne(hit, run, fresh = false) {
+      try {
+        hit.stage = "Cosmos Reason is re-watching the clip…"; refresh(hit);
+        const prev = hit.relook, prevPlace = hit.place;
+        const rl = await api("relook", { source: hit.source, caption: hit.caption, object_classes: hit.object_classes, fresh }, state.abort.signal);
+        if (run !== state.run) return;
+        hit.liveNote = fresh && prev ? (clueSet(prev) === clueSet(rl)
+          ? `Live re-watch read the same place clues as the atlas (${clueSet(rl) || "none"}).`
+          : `Live re-watch differs from the atlas: before “${clueSet(prev) || "none"}”, now “${clueSet(rl) || "none"}”.`) : null;
+        hit.relook = rl; hit.category = rl.category;
+        const clues = rl.streets.length + rl.landmarks.length;
+        hit.stage = clues ? `Read ${describeClues(rl)} · checking OpenStreetMap…` : "No readable place clues";
+        refresh(hit);
+        const place = await api("place", { streets: rl.streets, landmarks: rl.landmarks }, state.abort.signal);
+        if (run !== state.run) return;
+        if (prevPlace && prevPlace.label === place.label) {
+          for (const k of ["route_support"]) if (prevPlace[k]) place[k] = prevPlace[k];
+        }
+        if (prevPlace && prevPlace.route_rejected && prevPlace.route_rejected.label === place.label) {
+          Object.assign(place, { route_rejected: prevPlace.route_rejected, status: "unlocated", point: null, label: null });
+        }
+        hit.place = place; hit.stage = null;
+        corroborate(); refresh(hit, !fresh);
+      } catch (err) {
+        if (err.name === "AbortError" || run !== state.run) return;
+        hit.stage = null; hit.error = "Second look failed: " + err.message; refresh(hit);
+      }
+    }
+    function describeClues(rl) {
+      const parts = rl.streets.map(s => `“${s.read}”`).concat(rl.landmarks.map(l => `“${l}”`));
+      return parts.slice(0, 2).join(", ") + (parts.length > 2 ? "…" : "");
+    }
+
+    function haversine(a, b) {
+      const R = 6371000, r = Math.PI / 180, dLat = (b[0] - a[0]) * r, dLon = (b[1] - a[1]) * r;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+    const anchorPoints = (p) => p.point ? [p.point] : (p.geometry || []).flat();
+    function corroborate() {
+      const placed = state.results.filter(h => ["verified", "landmark", "area", "street"].includes(kindOf(h)) && h.review !== "rejected");
+      placed.forEach(h => { h.sameChunk = []; });
+      for (const a of placed) for (const b of placed) {
+        if (a === b || a.original_video !== b.original_video || !a.place.label || (a.place.label || "").toLowerCase() === (b.place.label || "").toLowerCase()) continue;
+        let best = Infinity;
+        for (const p of anchorPoints(a.place)) for (const q of anchorPoints(b.place)) best = Math.min(best, haversine(p, q));
+        if (best <= 350 && a.sameChunk.length < 3) a.sameChunk.push(`${b.place.label} (${secs(b)} of the same chunk, ${Math.round(best)} m away)`);
+      }
+    }
+
+    /* ---------- rendering ---------- */
+    function refresh(hit, fit = false) { renderFilters(); renderList(); drawLayers(fit); if (state.selected === hit) renderRight(); }
+    function renderAll(fit) { renderFilters(); renderList(); drawLayers(fit); renderRight(); }
+
+    function counts() {
+      const c = Object.fromEntries(KIND_ORDER.map(k => [k, 0]));
+      state.results.forEach(h => { if (h.review !== "rejected") c[kindOf(h)]++; });
+      if (state.view === "atlas") c.none += state.atlas.unlocated;
+      return c;
+    }
+    function renderFilters() {
+      const root = $("filters"); root.innerHTML = "";
+      const c = counts();
+      ["verified", "landmark", "area", "street", "rejected", "none"].forEach(k => {
+        const b = el("button", "filter" + (state.hidden.has(k) ? " off" : "")); b.type = "button";
+        b.setAttribute("aria-pressed", String(!state.hidden.has(k)));
+        const sw = el("span", "swatch " + KIND[k].swatch); sw.style.color = KIND[k].color;
+        const txt = el("span", "name", KIND[k].label); txt.appendChild(el("span", "hint", KIND[k].hint));
+        b.append(sw, txt, el("span", "count", fmt(c[k])));
+        b.onclick = () => { state.hidden.has(k) ? state.hidden.delete(k) : state.hidden.add(k); renderFilters(); renderList(); drawLayers(false); };
+        root.appendChild(b);
+      });
+    }
+
+    function visible(h) { const k = kindOf(h); return k === "pending" || !state.hidden.has(k); }
+
+    function renderList() {
+      const root = $("list"); root.innerHTML = "";
+      if (state.view === "search" && !state.meta) { root.appendChild(el("div", "empty", "Searching…")); return; }
+      const rows = state.results.filter(visible);
+      if (!state.results.length) { root.appendChild(el("div", "empty", state.view === "search" ? "No matching clips. That is a real empty result." : "No placed clips yet.")); return; }
+      if (!rows.length) { root.appendChild(el("div", "empty", "All clips here are hidden by the filters above.")); return; }
+      if (state.view === "atlas" && state.hidden.has("none") && state.atlas.unlocated)
+        root.appendChild(el("div", "empty", `${fmt(state.atlas.unlocated)} clips with nothing placeable are not listed.`));
+      rows.forEach(h => {
+        const k = kindOf(h);
+        const a = el("div", "item" + (state.selected === h ? " selected" : "") + (k === "none" || k === "rejected" ? " muted" : ""));
+        a.tabIndex = 0; a.setAttribute("role", "option"); a.setAttribute("aria-selected", String(state.selected === h));
+        const ic = el("div", "ic emoji", ICON[h.category] || "📍"); ic.style.background = KIND[k].bg;
+        const body = el("div");
+        body.appendChild(el("div", "t", titleOf(h)));
+        body.appendChild(el("div", "s", `${k === "none" ? CAT_LABEL[h.category] + " · no place found" : KIND[k].label} · ${secs(h)}`));
+        const tags = el("div", "tags");
+        const support = (h.place?.route_support || []).length + (h.place?.corroborated_by || []).length + (h.sameChunk || []).length;
+        if (support) tags.appendChild(el("span", "tag good", "✓ other evidence agrees"));
+        if (k === "rejected") tags.appendChild(el("span", "tag bad", "✕ route conflict"));
+        if (h.relook?.riding === "yes") tags.appendChild(el("span", "tag info", "someone riding"));
+        if (h.relook?.disagreements?.some(d => d.includes("riding"))) tags.appendChild(el("span", "tag warn", "caption disagrees"));
+        if (h.review === "accepted") tags.appendChild(el("span", "tag good", "accepted"));
+        if (state.shortlist.some(s => s.id === h.id)) tags.appendChild(el("span", "tag", "★ saved"));
+        if (tags.childNodes.length) body.appendChild(tags);
+        if (h.stage) { const w = el("div", "working"); w.append(el("span", "spinner"), el("span", null, h.stage)); body.appendChild(w); }
+        if (h.error) body.appendChild(el("div", "s", h.error));
+        a.append(ic, body);
+        a.onclick = () => selectHit(h, true);
+        a.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectHit(h, true); } };
+        root.appendChild(a);
+      });
+    }
+
+    function pushArea(bounds, point, r) {
+      const b = L.latLng(point).toBounds(Math.max(2 * (r || 100), 400));
+      bounds.push([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]);
+    }
+    function drawLayers(fit) {
+      layer.clearLayers();
+      const groups = new Map(), bounds = [];
+      state.results.forEach(h => {
+        const p = h.place, k = kindOf(h);
+        if (!p || h.review === "rejected" || state.hidden.has(k)) return;
+        const sel = state.selected === h;
+        if (k === "rejected" && p.route_rejected.point) {
+          const m = L.marker(p.route_rejected.point, { icon: L.divIcon({ html: `<div class="xpin${sel ? " sel" : ""}">✕</div>`, className: "", iconSize: [18, 18], iconAnchor: [9, 9] }),
+            title: `Rejected: ${p.route_rejected.label}` }).addTo(layer);
+          m.bindTooltip(`<b>Rejected:</b> “${esc(p.route_rejected.label)}”<br>${esc(p.route_rejected.reason)}`, { direction: "top", offset: [0, -8] });
+          m.on("click", () => selectHit(h));
+          return;
+        }
+        if (k === "street" && p.geometry && (sel || state.view === "search")) {
+          const line = L.polyline(p.geometry, { color: KIND.street.hex, weight: sel ? 6 : 4, opacity: sel ? .85 : .45 }).addTo(layer);
+          line.on("click", () => selectHit(h)); line.bindTooltip(`${esc(p.label)} · position along the street unknown`, { sticky: true });
+          if (state.view === "search") p.geometry.forEach(seg => seg.forEach(pt => bounds.push(pt)));
+        }
+        if (k === "area" && p.point) {
+          const c = L.circle(p.point, { radius: p.radius_m, color: KIND.area.hex, dashArray: "6 6", weight: sel ? 3 : 2, fillOpacity: sel ? .14 : .07 }).addTo(layer);
+          c.on("click", () => selectHit(h)); c.bindTooltip(`Near ${esc(p.label)} · approximate area`, { sticky: true });
+          pushArea(bounds, p.point, p.radius_m);
+        }
+        if ((k === "verified" || k === "landmark") && p.point) {
+          const key = p.point.map(v => v.toFixed(4)).join(",");
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(h); pushArea(bounds, p.point, p.radius_m);
+        }
+      });
+      groups.forEach(hits => {
+        const h = hits.includes(state.selected) ? state.selected : hits[0], p = h.place, k = kindOf(h);
+        const sel = hits.includes(state.selected);
+        const html = `<div class="pin${sel ? " sel" : ""}" style="--c:${KIND[k].hex}">${ICON[h.category] || "📍"}${hits.length > 1 ? `<span class="n">${hits.length}</span>` : ""}</div>`;
+        const m = L.marker(p.point, { icon: L.divIcon({ html, className: "", iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: true,
+          title: `${p.label} · ${KIND[k].label} · ${hits.length} clip(s)`, zIndexOffset: sel ? 1000 : 0 }).addTo(layer);
+        m.bindTooltip(`<b>${esc(p.label)}</b><br>${KIND[k].label}${hits.length > 1 ? ` · ${hits.length} clips` : ""}`, { direction: "top", offset: [0, -14] });
+        m.on("click", () => selectHit(h));
+      });
+      if (fit && bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.05), { maxZoom: 16, animate: !reduceMotion });
+    }
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function selectHit(h, pan = true) {
+      state.selected = h;
+      renderList(); drawLayers(false); renderRight();
+      $("rightScroll").scrollTop = 0;
+      const p = h.place;
+      const pt = p?.point || p?.route_rejected?.point;
+      if (pan && pt) map.flyTo(pt, Math.max(map.getZoom(), 15), { duration: reduceMotion ? 0 : .6 });
+      if (p && p.status === "approximate_street" && !p.geometry && h.relook) {
+        api("place", { streets: h.relook.streets, landmarks: h.relook.landmarks }).then(res => {
+          if (!res.geometry) return;
+          h.place = { ...h.place, geometry: res.geometry };
+          if (state.selected === h) { drawLayers(false); map.fitBounds(L.latLngBounds(res.geometry.flat()).pad(0.15), { maxZoom: 15 }); }
+        }).catch(() => {});
+      }
+      const item = document.querySelector(".item.selected"); if (item) item.scrollIntoView({ block: "nearest" });
+    }
+
+    /* ---------- right panel ---------- */
+    function renderRight() {
+      const root = $("right"); root.innerHTML = "";
+      const h = state.selected;
+      $("actions").hidden = !h;
+      if (!h) return renderOverview(root);
+      const k = kindOf(h), p = h.place, rl = h.relook;
+
+      const head = el("div", "ev-head"), left = el("div");
+      const badge = el("span", "status-badge", KIND[k].label); badge.style.background = KIND[k].bg; badge.style.color = KIND[k].color;
+      left.appendChild(badge);
+      left.appendChild(el("h1", null, k === "rejected" ? `Not placed: “${p.route_rejected.label}”` : (p?.label || (k === "pending" ? "Second look running…" : "No place found"))));
+      left.appendChild(el("div", "sub", `${PRECISION[k]} · ${CAT_LABEL[h.category] || "Clip"} · ${secs(h)}`));
+      const close = el("button", "close", "✕"); close.type = "button"; close.setAttribute("aria-label", "Close evidence");
+      close.onclick = () => { state.selected = null; renderList(); drawLayers(false); renderRight(); };
+      head.append(left, close); root.appendChild(head);
+
+      const v = el("video"); v.controls = true; v.preload = "metadata"; v.src = h.clip_url; root.appendChild(v);
+      root.appendChild(el("div", "clipmeta", `${h.camera_id || "camera"} · ${fileOf(h.source)}`));
+
+      if (h.liveNote) root.appendChild(el("div", "flag good", h.liveNote));
+      if (k === "rejected") root.appendChild(el("div", "flag bad", p.route_rejected.reason));
+
+      root.appendChild(el("h3", null, "How we know"));
+      const chain = el("ol", "chain");
+      const step = (state_, title, body) => {
+        const li = el("li"); li.appendChild(el("span", "dot " + state_, { ok: "✓", no: "✕", mid: "~", "": "·" }[state_]));
+        const d = el("div"); d.appendChild(el("b", null, title));
+        if (body) { const b = el("div", "body"); typeof body === "string" ? (b.textContent = body) : b.appendChild(body); d.appendChild(b); }
+        li.appendChild(d); chain.appendChild(li);
+      };
+
+      if (rl) {
+        const b = el("div");
+        const signs = (rl.signs_read || []).filter(s => s.kind !== "other" || (rl.landmarks || []).includes(s.text));
+        const named = [...signs.map(s => `${s.text} (${s.kind === "corner_name" ? "corner sign" : s.kind === "overhead_guide" ? "guide sign" : "sign"})`), ...(rl.business_signs || [])];
+        if (named.length) { named.slice(0, 6).forEach((t, i) => { if (i) b.append(", "); b.appendChild(el("span", "q", t)); }); if (named.length > 6) b.append(` and ${named.length - 6} more`); }
+        else b.textContent = "No readable street or business names.";
+        const det = el("details"); det.appendChild(el("summary", null, "Everything it read"));
+        const ul = el("ul"); [...(rl.signs_read || []).map(s => `${s.text} · ${s.kind.replace("_", " ")}`), ...(rl.business_signs || []).map(x => `${x} · business name`)].forEach(t => ul.appendChild(el("li", null, t)));
+        det.appendChild(ul); b.appendChild(det);
+        b.appendChild(el("div", "coord", `${rl.model} watched ${(rl.clip_bytes / 1e6).toFixed(1)} MB in ${(rl.latency_ms / 1000).toFixed(1)} s${h.liveNote ? ", live just now" : state.atlas.bySource.has(h.source) ? ", during the archive build" : ""}`));
+        step(named.length ? "ok" : "", "Cosmos Reason re-watched the clip", b);
+      } else step("", "Cosmos Reason re-watched the clip", h.stage || "Not re-watched yet. Use Re-watch live below.");
+
+      if (p) {
+        const b = el("div");
+        const cand = p.route_rejected;
+        b.appendChild(el("div", null, cand ? `“${cand.label}” matched one OpenStreetMap feature.` : p.method));
+        const pt = p.point || cand?.point;
+        if (pt) b.appendChild(el("div", "coord", `${pt[0].toFixed(5)}, ${pt[1].toFixed(5)} from OpenStreetMap (ODbL). The model never supplies coordinates.`));
+        if ((p.checks || []).length) {
+          const det = el("details"); det.appendChild(el("summary", null, `${p.checks.length} checks`));
+          const ul = el("ul"); p.checks.forEach(c => ul.appendChild(el("li", null, `${c.check}: ${c.result}`))); det.appendChild(ul); b.appendChild(det);
+        }
+        const st = k === "none" ? "" : k === "street" || k === "area" ? "mid" : "ok";
+        step(st, k === "none" ? "Nothing matched OpenStreetMap" : "Matched to OpenStreetMap", b);
+
+        const route = [...(p.route_support || []), ...(p.corroborated_by || [])];
+        const agree = [...route, ...(h.sameChunk || []).filter(s => !route.some(r => r.startsWith(s.split(" (")[0] + " ")))]
+          .map(s => s.replace(/, \d{1,2} m away/, ", at the same spot"));
+        if (cand) step("no", "Route check failed", cand.reason);
+        else if (agree.length) {
+          const ul = el("ul"); ul.style.margin = "2px 0 0"; ul.style.paddingLeft = "16px";
+          [...new Set(agree)].slice(0, 4).forEach(t => ul.appendChild(el("li", null, t)));
+          step("ok", "Other evidence agrees", ul);
+        } else if (k !== "none") step("", "Route check", "No neighbouring placements to compare with. Treat as a single source.");
+      } else step("", "OpenStreetMap match", "Waiting for the second look.");
+
+      if (["verified", "landmark", "area", "street"].includes(k)) {
+        const b = el("div", "review");
+        const ok = el("button", "btn" + (h.review === "accepted" ? " on-ok" : ""), "✓ Accept place"); ok.type = "button";
+        const no = el("button", "btn" + (h.review === "rejected" ? " on-no" : ""), "✕ Reject place"); no.type = "button";
+        ok.onclick = () => { h.review = h.review === "accepted" ? null : "accepted"; afterReview(h); };
+        no.onclick = () => { h.review = h.review === "rejected" ? null : "rejected"; afterReview(h); };
+        b.append(ok, no);
+        step(h.review === "accepted" ? "ok" : h.review === "rejected" ? "no" : "", "Your review", b);
+      }
+      root.appendChild(chain);
+
+      if (rl) {
+        root.appendChild(el("h3", null, "In the clip"));
+        const facts = el("div", "facts");
+        const fact = (label, val) => { const f = el("span", "fact" + (val === "yes" ? " yes" : ""), `${label}: ${val}`); facts.appendChild(f); };
+        fact("Someone riding a bike", rl.riding); fact("Parked bikes", rl.parked); fact("Roadwork", rl.roadwork);
+        root.appendChild(facts);
+        if ((rl.ad_surfaces || []).length) root.appendChild(el("div", "caption", "Visible ad surfaces (owner unknown): " + rl.ad_surfaces.join("; ")));
+      }
+
+      root.appendChild(el("h3", null, "Index caption vs second look"));
+      (rl?.disagreements || []).forEach(d => root.appendChild(el("div", "flag", d)));
+      if (rl && !(rl.disagreements || []).length) root.appendChild(el("div", "flag good", "The second look agrees with the index caption."));
+      root.appendChild(el("div", "caption", h.caption || "(no caption)"));
+
+      $("note").value = (state.shortlist.find(x => x.id === h.id) || {}).note || "";
+      const saved = state.shortlist.some(x => x.id === h.id);
+      $("saveBtn").textContent = saved ? "★ Saved · update" : "Save to shortlist";
+      $("relookBtn").disabled = !!h.stage;
+      $("relookBtn").textContent = h.stage ? "Re-watching…" : rl ? "Re-watch live" : "Run second look";
+    }
+    function afterReview(h) { corroborate(); renderFilters(); renderList(); drawLayers(false); renderRight(); syncShortlist(h); }
+
+    function renderOverview(root) {
+      const s = state.atlas.stats, a = state.atlas;
+      const hero = el("div", "hero");
+      if (state.view === "search") {
+        const uc = UC[state.useCase];
+        if (uc) {
+          root.appendChild(useCaseBrief(uc));
+          root.appendChild(el("h3", null, "Next"));
+          root.appendChild(el("p", "muted-p", `Open a clip to see how it was placed, save the useful ones, then open Shortlist and generate a ${uc.deliverable.toLowerCase()}.`));
+        } else {
+          hero.appendChild(el("h1", null, "Pick a clip to see the evidence"));
+          hero.appendChild(el("p", null, "Results already re-watched by the archive build appear on the map straight away. New clips get a live second look."));
+          root.appendChild(hero);
+        }
+        if (state.meta?.fallback) {
+          const c = el("div", "callout warn"); c.textContent = state.meta.fallback_reason; root.appendChild(c);
+        }
+        if (state.meta?.synthesis) {
+          root.appendChild(el("h3", null, "What VSS says about the top clips"));
+          const md = state.meta.synthesis.replace(/\s+-\s+(?=\*\*)/g, "\n- ").replace(/\s*(\*\*(Answer|Notable moments|Gaps)\*\*)\s*/g, "\n$1 ");
+          const box = renderMarkdown(md); box.className = "caption synth"; root.appendChild(box);
+        }
+        return;
+      }
+      hero.appendChild(el("h1", null, "Toronto footage, placed by what the camera saw"));
+      hero.appendChild(el("p", null, "The dashcam archive has no GPS. Every pin here was earned from a sign in the video, then checked twice."));
+      root.appendChild(hero);
+      if (s.clips) {
+        const st = el("div", "stats");
+        const add = (n, label, cls = "") => { const d = el("div", "stat " + cls); d.append(el("b", null, fmt(n)), el("span", null, label)); st.appendChild(d); };
+        add(s.clips, "clips re-watched by Cosmos Reason");
+        add(s.streets_read, "different street names read off signs");
+        add(placedCount(), "clips placed on the map", "good");
+        add(s.route_rejected, "matches rejected by the route check", "bad");
+        root.appendChild(st);
+      }
+      root.appendChild(el("h3", null, "Who this helps"));
+      const list = el("div", "uc-list");
+      USE_CASES.forEach(u => list.appendChild(useCaseCard(u)));
+      root.appendChild(list);
+      root.appendChild(el("p", "coord", "Places, not people: nothing here identifies faces, licence plates or individuals."));
+      root.appendChild(el("h3", null, "How a clip earns a pin"));
+      const ol = el("ol", "steps");
+      [["Read", "Cosmos Reason re-watches the clip and reads street signs and business names."],
+       ["Match", "Names are looked up in OpenStreetMap. Coordinates come from there, never from a model."],
+       ["Check", "The drive is continuous, so a match the car could not have reached is rejected."]]
+        .forEach(([t, d], i) => { const li = el("li"); li.append(el("span", "num", String(i + 1))); const x = el("div"); x.append(el("b", null, t), el("span", null, d)); li.appendChild(x); ol.appendChild(li); });
+      root.appendChild(ol);
+      const c = el("div", "callout");
+      c.textContent = "Start with a green pin near Yonge and Bloor, or a red ✕ to see a match the route check threw out. Clips with nothing placeable are counted but never shown as places.";
+      root.appendChild(c);
+      if (a.built_at) root.appendChild(el("p", "coord", `Atlas built ${new Date(a.built_at).toLocaleString("en-CA")} · ${a.model}`));
+    }
+
+    function useCaseSignal(u) { return u.signal(state.atlas.signals || {}, state.atlas.stats || {}) || ""; }
+    function useCaseCard(u) {
+      const d = el("button", "uc"); d.type = "button"; d.title = `Search: ${u.query}`;
+      d.onclick = () => runSearch(u.query, u.id);
+      d.appendChild(el("span", "ic emoji", u.icon));
+      const body = el("div");
+      body.append(el("b", null, u.title), el("span", "who", u.who), el("span", "line", u.problem));
+      const pays = el("span", "line pays"); pays.append(el("strong", null, "Who pays: "), u.pays); body.appendChild(pays);
+      const sig = useCaseSignal(u); if (sig) body.appendChild(el("span", /\d/.test(sig) ? "sig" : "sig plain", sig));
+      body.appendChild(el("span", "go", `Explore → ${u.deliverable.toLowerCase()}`));
+      d.appendChild(body);
+      return d;
+    }
+    function useCaseBrief(u) {
+      const box = el("div", "uc-brief");
+      const head = el("div", "uc-head"); head.append(el("span", "ic emoji", u.icon));
+      const t = el("div"); t.append(el("h1", null, u.title), el("span", "who", u.who)); head.appendChild(t); box.appendChild(head);
+      const dl = el("dl");
+      [["The problem", u.problem], ["What Evidence Atlas does", u.does], ["Who pays", u.pays], ["In this archive", useCaseSignal(u)], ["Deliverable", `${u.deliverable}, written from the saved evidence only`]]
+        .forEach(([k, v]) => { if (v) dl.append(el("dt", null, k), el("dd", null, v)); });
+      box.appendChild(dl);
+      box.appendChild(el("p", "coord", `Search used: “${u.query}”. Edit it in the search box to refine.`));
+      return box;
+    }
+
+    $("relookBtn").onclick = () => { const h = state.selected; if (h && !h.stage) relookOne(h, state.run, !!h.relook); };
+
+    /* ---------- shortlist & card ---------- */
+    function savedAs(h) {
+      const k = h.review === "rejected" ? "none" : kindOf(h);
+      if (k === "verified" || k === "landmark") return `Place · ${h.place.label}`;
+      if (k === "area" || k === "street") return `Approximate · ${h.place.label}`;
+      return "Research lead · location unknown";
+    }
+    function entryFor(h) {
+      return { id: h.id, source: h.source, original_video: h.original_video, caption: h.caption, category: h.category, camera_id: h.camera_id,
+        segment_start_sec: h.segment_start_sec, segment_end_sec: h.segment_end_sec, clip_url: h.clip_url, caption_claims: h.caption_claims,
+        object_classes: h.object_classes, relook: h.relook, place: h.place, review: h.review, corroborated_by: h.sameChunk,
+        note: $("note").value.slice(0, 300), query: state.query, saved_as: savedAs(h) };
+    }
+    function persist() {
+      sessionStorage.setItem("ea-shortlist-v3", JSON.stringify(state.shortlist));
+      $("slCount").textContent = String(state.shortlist.length);
+      $("cardBtn").disabled = !state.shortlist.length;
+      renderShortlist();
+    }
+    function syncShortlist(h) { const i = state.shortlist.findIndex(x => x.id === h.id); if (i >= 0) { state.shortlist[i] = entryFor(h); persist(); } }
+    $("saveBtn").onclick = () => {
+      const h = state.selected; if (!h) return;
+      const i = state.shortlist.findIndex(x => x.id === h.id);
+      if (i >= 0) state.shortlist[i] = entryFor(h); else state.shortlist.push(entryFor(h));
+      persist(); renderList(); renderRight();
+    };
+    function renderShortlist() {
+      const root = $("slList"); root.innerHTML = "";
+      if (!state.shortlist.length) { root.appendChild(el("div", "empty", "Nothing saved yet. Open a clip and press Save to shortlist.")); return; }
+      state.shortlist.forEach((s, idx) => {
+        const d = el("div", "sl-item"), body = el("div");
+        body.appendChild(el("div", "t", `${ICON[s.category] || "📍"} ${s.saved_as}`));
+        body.appendChild(el("div", "s", `${CAT_LABEL[s.category] || "Clip"} · ${secs(s)}${s.note ? " · “" + s.note + "”" : ""}`));
+        const open = el("button", "link", "Open"); open.type = "button";
+        open.onclick = () => { const live = state.results.find(r => r.id === s.id) || state.atlas.bySource.get(s.id); if (live) { $("sheet").classList.remove("open"); selectHit(live); } };
+        body.appendChild(open);
+        const rm = el("button", "close", "✕"); rm.type = "button"; rm.setAttribute("aria-label", "Remove from shortlist");
+        rm.onclick = () => { state.shortlist.splice(idx, 1); persist(); renderList(); if (state.selected) renderRight(); };
+        d.append(body, rm); root.appendChild(d);
+      });
+    }
+    $("slBtn").onclick = () => $("sheet").classList.toggle("open");
+    $("closeSheet").onclick = () => $("sheet").classList.remove("open");
+
+    function renderMarkdown(md) {
+      const root = el("div"); let ul = null;
+      const inline = (node, text) => {
+        text.split(/(\*\*[^*]+\*\*)/g).forEach(part => {
+          if (part.startsWith("**") && part.endsWith("**")) node.appendChild(el("strong", null, part.slice(2, -2)));
+          else if (part) node.appendChild(document.createTextNode(part.replace(/`/g, "")));
+        });
+      };
+      md.split("\n").forEach(line => {
+        const t = line.trim();
+        if (!t) { ul = null; return; }
+        if (/^#{1,4} /.test(t)) { ul = null; const h = el("h2"); inline(h, t.replace(/^#+ /, "")); root.appendChild(h); return; }
+        if (/^[*-] /.test(t)) { if (!ul) { ul = el("ul"); root.appendChild(ul); } const li = el("li"); inline(li, t.slice(2)); ul.appendChild(li); return; }
+        ul = null;
+        const p = el("p", t.startsWith("Archive-based scouting hypothesis") ? "disclaimer" : null); inline(p, t); root.appendChild(p);
+      });
+      return root;
+    }
+    $("cardBtn").onclick = async () => {
+      $("cardBtn").disabled = true; $("cardBtn").textContent = `Writing the ${UC[$("cardKind").value].deliverable.toLowerCase()}…`;
+      const out = $("cardOut"); out.innerHTML = ""; $("cardMeta").textContent = "";
+      try {
+        const data = await api("card", { query: state.query, use_case: $("cardKind").value, evidence: state.shortlist });
+        $("cardTitle").textContent = data.title || UC[$("cardKind").value].deliverable;
+        out.appendChild(renderMarkdown(data.card)); out.dataset.raw = data.card;
+        $("cardMeta").textContent = `${data.provider} · ${(data.latency_ms / 1000).toFixed(1)} s · written only from the saved evidence`;
+      } catch (err) { out.appendChild(el("p", null, "The card could not be written. Your shortlist is unchanged. " + err.message)); }
+      finally { $("cardBtn").disabled = !state.shortlist.length; syncCardLabel(); }
+      $("cardDialog").showModal();
+    };
+    $("copyCard").onclick = () => navigator.clipboard?.writeText($("cardOut").dataset.raw || $("cardOut").innerText).then(() => { $("copyCard").textContent = "Copied"; setTimeout(() => $("copyCard").textContent = "Copy", 1500); });
+
+    /* ---------- dialogs ---------- */
+    document.querySelectorAll("dialog [data-close]").forEach(b => b.onclick = () => b.closest("dialog").close());
+    document.querySelectorAll("dialog").forEach(d => d.addEventListener("click", (e) => { if (e.target === d) d.close(); }));
+    $("howBtn").onclick = () => $("howDialog").showModal();
+
+    function highlight(text) {
+      const frag = document.createDocumentFragment();
+      const re = /([A-Z][A-Za-z'.]+(?: [A-Z][A-Za-z'.]+){0,2} (?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Dr|Drive)\.?(?: (?:E|W|N|S|East|West|North|South)\b)?|“[^”]+”|"[^"]+")/g;
+      let last = 0, m;
+      while ((m = re.exec(text))) { frag.appendChild(document.createTextNode(text.slice(last, m.index))); frag.appendChild(el("mark", null, m[0])); last = m.index + m[0].length; }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      return frag;
+    }
+    $("compareBtn").onclick = async () => {
+      $("compareBox").hidden = false; $("compareRows").innerHTML = ""; $("compareStatus").textContent = "Loading…";
+      try {
+        const data = await api("reingest-compare");
+        $("compareStatus").textContent = data.reingested
+          ? "Same footage, new caption prompt. Highlighted text is what became searchable. The gain is small; the second look reads far more, which is why the atlas uses it."
+          : "Re-ingest still running for some clips.";
+        data.rows.forEach(r => {
+          const tr = el("tr");
+          tr.appendChild(el("td", null, `#${r.segment_number}`));
+          const b = el("td"); b.appendChild(highlight(r.before || "")); tr.appendChild(b);
+          const a = el("td"); a.appendChild(r.reingested ? highlight(r.after || "") : document.createTextNode("(not replaced yet)")); tr.appendChild(a);
+          $("compareRows").appendChild(tr);
+        });
+      } catch (err) { $("compareStatus").textContent = "Could not load: " + err.message; }
+    };
+
+    /* ---------- boot ---------- */
+    function renderUseCaseChips() {
+      const root = $("presets"); root.innerHTML = "";
+      USE_CASES.forEach(u => {
+        const b = el("button", "chip" + (state.useCase === u.id ? " on" : ""), `${u.icon} ${u.short}`); b.type = "button";
+        b.setAttribute("aria-pressed", String(state.useCase === u.id)); b.title = u.title;
+        b.onclick = () => runSearch(u.query, u.id); root.appendChild(b);
+      });
+      const sel = $("cardKind");
+      if (sel && state.useCase) { sel.value = state.useCase; syncCardLabel(); }
+    }
+    USE_CASES.forEach(u => $("cardKind").appendChild(new Option(u.deliverable, u.id)));
+    $("cardKind").onchange = syncCardLabel;
+    function syncCardLabel() { $("cardBtn").textContent = `Generate ${UC[$("cardKind").value].deliverable.toLowerCase()}`; }
+    renderUseCaseChips(); syncCardLabel();
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") { e.preventDefault(); $("q").focus(); }
+      if (e.key === "Escape" && state.selected && !document.querySelector("dialog[open]")) { state.selected = null; renderList(); drawLayers(false); renderRight(); }
+    });
+    persist(); renderAll(false); loadAtlas();
+  </script>
+</body>
+</html>
