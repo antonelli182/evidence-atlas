@@ -51,7 +51,8 @@
     /* ---------- layout ---------- */
     .app { display: grid; grid-template-columns: 360px minmax(0, 1fr) 420px; height: calc(100vh - 60px); }
     .left, .right { background: var(--panel); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-    .left { border-right: 1px solid var(--line); }
+    .left { border-right: 1px solid var(--line); overflow-y: auto; }
+    .left > .section { flex: none; }
     .right { border-left: 1px solid var(--line); }
     #map { height: 100%; width: 100%; background: #eef0f1; }
     .basemap { filter: grayscale(1) contrast(.82) brightness(1.1) sepia(.12) hue-rotate(170deg) saturate(.6); }
@@ -69,7 +70,7 @@
     .context { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .context h2 { font-size: 15px; margin: 0; }
     .context p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-    .link { background: none; border: 0; padding: 0; color: var(--landmark); font-weight: 500; font-size: 13px; }
+    .link { background: none; border: 0; padding: 0; color: var(--landmark); font-weight: 500; font-size: 13px; white-space: nowrap; }
     .presets { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; }
     .chip:hover { background: var(--hover); }
@@ -97,20 +98,31 @@
     .muted-p { color: var(--muted); font-size: 13px; margin: 0; }
     .kind { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
     .kind select { font: inherit; color: var(--text, #15181d); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--panel); flex: 1; }
-    .filters { display: grid; gap: 4px; }
-    .filter { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; border: 0; background: none; text-align: left; }
+    .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px; }
+    .filter { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; border: 0; background: none; text-align: left; }
     .filter:hover { background: var(--hover); }
-    .filter .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
-    .filter .name { font-size: 13px; font-weight: 500; }
-    .filter .hint { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; line-height: 1.35; }
+    .filter .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+    .filter .name { font-size: 12.5px; font-weight: 500; line-height: 1.25; }
     .filter.off { opacity: .4; }
+    .filters-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--faint); margin: 6px 8px 0; }
     .swatch { width: 14px; height: 14px; border-radius: 50%; border: 3px solid currentColor; background: #fff; }
     .swatch.area { border-style: dashed; border-width: 2px; }
     .swatch.street { border-radius: 3px; height: 6px; border: 0; background: currentColor; }
     .swatch.rejected { border-style: dashed; border-width: 2px; }
     .swatch.none { border-width: 2px; }
-    .list { overflow: auto; flex: 1; padding: 6px 8px 24px; }
+    .list { flex: none; padding: 0 8px 24px; }
+    .group { position: sticky; top: 0; z-index: 2; background: var(--panel); margin: 0 -8px; padding: 10px 16px 7px; border-bottom: 1px solid var(--line);
+      display: grid; grid-template-columns: 14px 1fr auto; column-gap: 8px; align-items: center; }
+    .group b { font-size: 12.5px; }
+    .group .hint { grid-column: 2 / -1; font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+    .group .n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .item { display: grid; grid-template-columns: 36px 1fr; gap: 10px; padding: 9px 8px; border-radius: 10px; cursor: pointer; align-items: start; }
+    .item + .item { margin-top: 1px; }
+    .item .ic { position: relative; }
+    .item .rank { position: absolute; top: -5px; left: -5px; min-width: 17px; height: 17px; border-radius: 999px; background: var(--ink); color: #fff; font: 600 10px/17px Inter, sans-serif; text-align: center; padding: 0 4px; }
+    .item .read { font-size: 12px; color: #3d434b; margin-top: 4px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .item .read .q { background: #fff6d6; border-radius: 4px; padding: 0 3px; }
+    .item .read.none { color: var(--faint); }
     .item:hover { background: var(--hover); }
     .item.selected { background: #eef2fd; box-shadow: inset 0 0 0 1px #c9d5f6; }
     .item .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; }
@@ -366,13 +378,13 @@
     const CAT_LABEL = { cyclist: "Cyclist", construction: "Roadwork", storefront: "Storefront or venue", delivery: "Delivery",
       pedestrian: "Pedestrians", parked_bicycles: "Parked bicycles", skateboarder: "Skateboarder", ad_surface: "Ad surface", other: "Street scene" };
     const KIND = {
-      verified: { label: "Verified intersection", hint: "Two corner street signs that meet. Within ~60 m.", color: "var(--verified)", bg: "var(--verified-bg)", hex: "#0e7c5a", swatch: "" },
-      landmark: { label: "Landmark", hint: "A uniquely named place was read. Within ~150 m.", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" },
-      area: { label: "Approximate area", hint: "Guide signs name streets that meet. Within ~350 m.", color: "var(--area)", bg: "var(--area-bg)", hex: "#b86e0b", swatch: "area" },
-      street: { label: "Street only", hint: "Street known, position along it unknown. Shown when selected.", color: "var(--street)", bg: "var(--street-bg)", hex: "#8a7a5c", swatch: "street" },
-      rejected: { label: "Rejected by route check", hint: "Sign matched, but the drive could not have been there.", color: "var(--rejected)", bg: "var(--rejected-bg)", hex: "#c0392b", swatch: "rejected" },
-      none: { label: "No place found", hint: "Nothing readable to place. Never on the map.", color: "var(--none)", bg: "var(--none-bg)", hex: "#8b9099", swatch: "none" },
-      pending: { label: "Checking…", hint: "", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" }
+      verified: { label: "Verified intersection", short: "Verified", hint: "Two corner street signs that meet. Within ~60 m.", color: "var(--verified)", bg: "var(--verified-bg)", hex: "#0e7c5a", swatch: "" },
+      landmark: { label: "Landmark", short: "Landmark", hint: "A uniquely named place was read. Within ~150 m.", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" },
+      area: { label: "Approximate area", short: "Area", hint: "Guide signs name streets that meet. Within ~350 m.", color: "var(--area)", bg: "var(--area-bg)", hex: "#b86e0b", swatch: "area" },
+      street: { label: "Street only", short: "Street only", hint: "Street known, position along it unknown. Drawn when selected.", color: "var(--street)", bg: "var(--street-bg)", hex: "#8a7a5c", swatch: "street" },
+      rejected: { label: "Rejected by route check", short: "Rejected", hint: "Sign matched, but the drive could not have been there.", color: "var(--rejected)", bg: "var(--rejected-bg)", hex: "#c0392b", swatch: "rejected" },
+      none: { label: "No place found", short: "No place", hint: "Nothing readable to place. Never on the map.", color: "var(--none)", bg: "var(--none-bg)", hex: "#8b9099", swatch: "none" },
+      pending: { label: "Checking…", short: "Checking…", hint: "", color: "var(--landmark)", bg: "var(--landmark-bg)", hex: "#2f5bd3", swatch: "" }
     };
     const KIND_ORDER = ["verified", "landmark", "area", "street", "rejected", "none", "pending"];
     const PRECISION = {
@@ -474,11 +486,28 @@
           : `${data.count} best matches · ${(data.latency_ms / 1000).toFixed(1)} s · top results, not a census`;
         corroborate(); renderAll(true);
         secondLook(run, state.results.filter(h => h.stage));
+        loadStreetLines(run);
       } catch (err) {
         if (err.name !== "AbortError" && run === state.run) { $("ctxSub").textContent = "Search failed: " + err.message; state.meta = { count: 0 }; renderList(); }
       } finally { if (run === state.run) $("go").disabled = false; }
     }
     $("searchForm").onsubmit = (e) => { e.preventDefault(); runSearch($("q").value); };
+
+    async function loadStreetLines(run) {
+      const queue = state.results.filter(h => h.place?.status === "approximate_street" && !h.place.route_rejected && !h.place.geometry && h.relook);
+      if (!queue.length) return;
+      const worker = async () => {
+        while (queue.length && run === state.run) {
+          const h = queue.shift();
+          try {
+            const res = await api("place", { streets: h.relook.streets, landmarks: h.relook.landmarks }, state.abort.signal);
+            if (run === state.run && res.geometry && res.label === h.place.label) h.place = { ...h.place, geometry: res.geometry };
+          } catch { /* the line is optional; the clip stays listed */ }
+        }
+      };
+      await Promise.all(Array.from({ length: 3 }, worker));
+      if (run === state.run && state.view === "search") drawLayers(!state.selected);
+    }
 
     async function secondLook(run, hits) {
       const queue = hits.slice();
@@ -553,12 +582,26 @@
       ["verified", "landmark", "area", "street", "rejected", "none"].forEach(k => {
         const b = el("button", "filter" + (state.hidden.has(k) ? " off" : "")); b.type = "button";
         b.setAttribute("aria-pressed", String(!state.hidden.has(k)));
+        b.title = `${KIND[k].label}: ${KIND[k].hint} Click to ${state.hidden.has(k) ? "show" : "hide"}.`;
         const sw = el("span", "swatch " + KIND[k].swatch); sw.style.color = KIND[k].color;
-        const txt = el("span", "name", KIND[k].label); txt.appendChild(el("span", "hint", KIND[k].hint));
-        b.append(sw, txt, el("span", "count", fmt(c[k])));
+        b.append(sw, el("span", "name", KIND[k].short), el("span", "count", fmt(c[k])));
         b.onclick = () => { state.hidden.has(k) ? state.hidden.delete(k) : state.hidden.add(k); renderFilters(); renderList(); drawLayers(false); };
         root.appendChild(b);
       });
+      root.appendChild(el("p", "filters-note", "Click a type to show or hide it. Most precise first."));
+    }
+
+    const clipRef = (h) => {
+      const m = /set(\d+)_video_chunk_(\d+)/.exec(h.original_video || h.source || "");
+      const t = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+      const span = `${t(h.segment_start_sec || 0)}–${t(h.segment_end_sec || 0)}`;
+      return m ? `Drive ${Number(m[1])} · chunk ${Number(m[2])} · ${span}` : span;
+    };
+    function evidenceOf(h) {
+      const rl = h.relook; if (!rl) return [];
+      const named = [...(rl.streets || []).map(s => s.read || s.osm_name), ...(rl.landmarks || []), ...(rl.business_signs || [])]
+        .filter(t => t && /[A-Za-z]{3}/.test(t));
+      return [...new Set(named.map(t => t.trim()))];
     }
 
     function visible(h) { const k = kindOf(h); return k === "pending" || !state.hidden.has(k); }
@@ -569,22 +612,39 @@
       const rows = state.results.filter(visible);
       if (!state.results.length) { root.appendChild(el("div", "empty", state.view === "search" ? "No matching clips. That is a real empty result." : "No placed clips yet.")); return; }
       if (!rows.length) { root.appendChild(el("div", "empty", "All clips here are hidden by the filters above.")); return; }
-      if (state.view === "atlas" && state.hidden.has("none") && state.atlas.unlocated)
-        root.appendChild(el("div", "empty", `${fmt(state.atlas.unlocated)} clips with nothing placeable are not listed.`));
+      const grouped = state.view === "atlas";
+      const groupCounts = counts();
+      let lastKind = null;
       rows.forEach(h => {
         const k = kindOf(h);
+        if (grouped && k !== lastKind) {
+          lastKind = k;
+          const g = el("div", "group"); g.setAttribute("role", "presentation");
+          const sw = el("span", "swatch " + KIND[k].swatch); sw.style.color = KIND[k].color;
+          g.append(sw, el("b", null, KIND[k].label), el("span", "n", `${fmt(groupCounts[k])} clips`), el("span", "hint", KIND[k].hint));
+          root.appendChild(g);
+        }
         const a = el("div", "item" + (state.selected === h ? " selected" : "") + (k === "none" || k === "rejected" ? " muted" : ""));
         a.tabIndex = 0; a.setAttribute("role", "option"); a.setAttribute("aria-selected", String(state.selected === h));
         const ic = el("div", "ic emoji", ICON[h.category] || "📍"); ic.style.background = KIND[k].bg;
+        if (!grouped && h.rank != null) ic.appendChild(el("span", "rank", String(h.rank + 1)));
         const body = el("div");
         body.appendChild(el("div", "t", titleOf(h)));
-        body.appendChild(el("div", "s", `${k === "none" ? CAT_LABEL[h.category] + " · no place found" : KIND[k].label} · ${secs(h)}`));
+        body.appendChild(el("div", "s", grouped ? clipRef(h) : `${k === "none" ? "No place found" : KIND[k].short} · ${clipRef(h)}`));
+        const read = evidenceOf(h);
+        if (read.length) {
+          const r = el("div", "read"); r.append("Read ");
+          read.slice(0, 4).forEach((t, i) => { if (i) r.append(" · "); r.appendChild(el("span", "q", t)); });
+          if (read.length > 4) r.append(` +${read.length - 4}`);
+          body.appendChild(r);
+        } else if (h.relook) body.appendChild(el("div", "read none", "No street or business names readable"));
         const tags = el("div", "tags");
-        const support = (h.place?.route_support || []).length + (h.place?.corroborated_by || []).length + (h.sameChunk || []).length;
-        if (support) tags.appendChild(el("span", "tag good", "✓ other evidence agrees"));
+        const agreeing = [...(h.place?.route_support || []), ...(h.place?.corroborated_by || []), ...(h.sameChunk || [])];
+        if (agreeing.length) { const t = el("span", "tag good", `✓ ${agreeing.length} nearby clip${agreeing.length > 1 ? "s" : ""} agree`); t.title = agreeing.join("\n"); tags.appendChild(t); }
         if (k === "rejected") tags.appendChild(el("span", "tag bad", "✕ route conflict"));
         if (h.relook?.riding === "yes") tags.appendChild(el("span", "tag info", "someone riding"));
-        if (h.relook?.disagreements?.some(d => d.includes("riding"))) tags.appendChild(el("span", "tag warn", "caption disagrees"));
+        const ridingDis = (h.relook?.disagreements || []).filter(d => d.includes("riding"));
+        if (!grouped && ridingDis.length) { const t = el("span", "tag warn", "caption disagrees on riding"); t.title = ridingDis.join("\n"); tags.appendChild(t); }
         if (h.review === "accepted") tags.appendChild(el("span", "tag good", "accepted"));
         if (state.shortlist.some(s => s.id === h.id)) tags.appendChild(el("span", "tag", "★ saved"));
         if (tags.childNodes.length) body.appendChild(tags);
@@ -595,6 +655,8 @@
         a.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectHit(h, true); } };
         root.appendChild(a);
       });
+      if (grouped && state.hidden.has("none") && state.atlas.unlocated)
+        root.appendChild(el("div", "empty", `${fmt(state.atlas.unlocated)} clips with nothing placeable are counted in “No place” but not listed.`));
     }
 
     function pushArea(bounds, point, r) {
@@ -603,7 +665,7 @@
     }
     function drawLayers(fit) {
       layer.clearLayers();
-      const groups = new Map(), bounds = [];
+      const groups = new Map(), bounds = [], lineBounds = [];
       state.results.forEach(h => {
         const p = h.place, k = kindOf(h);
         if (!p || h.review === "rejected" || state.hidden.has(k)) return;
@@ -618,7 +680,7 @@
         if (k === "street" && p.geometry && (sel || state.view === "search")) {
           const line = L.polyline(p.geometry, { color: KIND.street.hex, weight: sel ? 6 : 4, opacity: sel ? .85 : .45 }).addTo(layer);
           line.on("click", () => selectHit(h)); line.bindTooltip(`${esc(p.label)} · position along the street unknown`, { sticky: true });
-          if (state.view === "search") p.geometry.forEach(seg => seg.forEach(pt => bounds.push(pt)));
+          if (state.view === "search") p.geometry.forEach(seg => seg.forEach(pt => lineBounds.push(pt)));
         }
         if (k === "area" && p.point) {
           const c = L.circle(p.point, { radius: p.radius_m, color: KIND.area.hex, dashArray: "6 6", weight: sel ? 3 : 2, fillOpacity: sel ? .14 : .07 }).addTo(layer);
@@ -640,7 +702,8 @@
         m.bindTooltip(`<b>${esc(p.label)}</b><br>${KIND[k].label}${hits.length > 1 ? ` · ${hits.length} clips` : ""}`, { direction: "top", offset: [0, -14] });
         m.on("click", () => selectHit(h));
       });
-      if (fit && bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.05), { maxZoom: 16, animate: !reduceMotion });
+      const fitTo = bounds.length ? bounds : lineBounds;
+      if (fit && fitTo.length) map.fitBounds(L.latLngBounds(fitTo).pad(0.05), { maxZoom: state.view === "search" ? 14 : 16, animate: !reduceMotion });
     }
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -673,7 +736,7 @@
       const badge = el("span", "status-badge", KIND[k].label); badge.style.background = KIND[k].bg; badge.style.color = KIND[k].color;
       left.appendChild(badge);
       left.appendChild(el("h1", null, k === "rejected" ? `Not placed: “${p.route_rejected.label}”` : (p?.label || (k === "pending" ? "Second look running…" : "No place found"))));
-      left.appendChild(el("div", "sub", `${PRECISION[k]} · ${CAT_LABEL[h.category] || "Clip"} · ${secs(h)}`));
+      left.appendChild(el("div", "sub", `${PRECISION[k]} · ${CAT_LABEL[h.category] || "Clip"} · ${clipRef(h)}`));
       const close = el("button", "close", "✕"); close.type = "button"; close.setAttribute("aria-label", "Close evidence");
       close.onclick = () => { state.selected = null; renderList(); drawLayers(false); renderRight(); };
       head.append(left, close); root.appendChild(head);
